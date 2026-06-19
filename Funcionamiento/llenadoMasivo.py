@@ -4,7 +4,6 @@ import datetime
 from modelos.estacionamiento import Estacionamiento
 from funcionamiento.catalogos import obtenerCodigoPorTexto
 
-
 def generarUbicacionesGenerales(cantidad):
     ubicaciones = []
     for numero in range(1, cantidad + 1):
