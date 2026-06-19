@@ -2,6 +2,7 @@ import pickle
 
 archivoBD     = "datos/bdParqueo.pkl"
 archivoConfig = "datos/configParqueo.pkl"
+archivoCatalogos = "datos/catalogosParqueo.pkl"
 
 def guardarBD(lista):
     """
@@ -86,6 +87,26 @@ def existeConfig():
     """
     try:
         with open(archivoConfig, "rb") as f:
+            pass
+        return True
+    except FileNotFoundError:
+        return False
+
+def guardarCatalogos(catalogos):
+    with open(archivoCatalogos, "wb") as f:
+        pickle.dump(catalogos, f)
+    return
+
+def cargarCatalogos():
+    try:
+        with open(archivoCatalogos, "rb") as f:
+            return pickle.load(f)
+    except FileNotFoundError:
+        return None
+
+def existeCatalogos():
+    try:
+        with open(archivoCatalogos, "rb") as f:
             pass
         return True
     except FileNotFoundError:
