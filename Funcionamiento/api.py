@@ -3,9 +3,11 @@ import json
 
 urlBaseMockaroo = "https://api.mockaroo.com/api/7bca61f0?key=4a719e30"
 
+
 def obtenerDatosMockaroo(cantidad):
     """
-    Funcionalidad: Consulta el API de Mockaroo y obtiene una lista de registros de vehiculos.
+    Funcionalidad:
+    Consulta el API de Mockaroo y obtiene una lista de registros de vehiculos.
     Entrada:
     - cantidad (int): Cantidad de registros a solicitar al API.
     Salida:
@@ -13,8 +15,10 @@ def obtenerDatosMockaroo(cantidad):
       o lista vacia si ocurre un error de conexion.
     """
     url = urlBaseMockaroo + "&count=" + str(cantidad)
+    encabezados = {"User-Agent": "Mozilla/5.0"}
+    peticion = urllib.request.Request(url, headers=encabezados)
     try:
-        respuesta = urllib.request.urlopen(url)
+        respuesta = urllib.request.urlopen(peticion)
         datos = respuesta.read()
         registros = json.loads(datos)
         return registros
@@ -23,7 +27,8 @@ def obtenerDatosMockaroo(cantidad):
 
 def filtrarRegistros(registros):
     """
-    Funcionalidad: Filtra los registros crudos del API y construye el diccionario
+    Funcionalidad:
+    Filtra los registros crudos del API y construye el diccionario
     de placas con la informacion relevante para el sistema.
     Entrada:
     - registros (list): Lista de diccionarios con los datos crudos del API.
@@ -50,7 +55,8 @@ def filtrarRegistros(registros):
 
 def obtenerListasUnicas(registros):
     """
-    Funcionalidad: Extrae las marcas, colores y tipos unicos que aparecen en los
+    Funcionalidad:
+    Extrae las marcas, colores y tipos unicos que aparecen en los
     registros del API, para usarlos como opciones iniciales en la
     interfaz grafica.
     Entrada:
