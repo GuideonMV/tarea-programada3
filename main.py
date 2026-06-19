@@ -11,8 +11,163 @@ from funcionamiento.llenadoMasivo import generarUbicacionesGenerales, construirL
 def obtenerVehiculos():
     messagebox.showinfo("Info", "Proximamente: Obtener vehiculos")
 
-def verEstacionamiento():
-    messagebox.showinfo("Info", "Proximamente: Ver estacionamiento")
+def manejarClicEspacio(ventanaPrincipal, ubicacion, listaObjetos, catalogos):
+    """
+    Funcionalidad: Maneja el clic sobre un espacio del parqueo. Si esta ocupado
+    muestra info del vehiculo, si esta libre permite estacionar.
+    Entrada:
+    - ventanaPrincipal (Tk): Ventana principal del sistema.
+    - ubicacion (str): Identificador del espacio clickeado.
+    - listaObjetos (list): Lista de objetos Estacionamiento.
+    - catalogos (dict): Diccionario de catalogos de marcas, colores y tipos.
+    Salida:
+    - None
+    """
+    objeto = buscarObjetoPorUbicacion(listaObjetos, ubicacion)
+    if objeto is None:
+        messagebox.showinfo("Espacio libre", "Espacio " + ubicacion + " esta libre, proximamente: Estacionar")
+    else:
+        messagebox.showinfo("Espacio ocupado", "Espacio " + ubicacion + " ocupado por placa " + objeto.placa + ", proximamente: Observar espacio")
+    return
+
+def construirBloques(todasUbicaciones):
+    """
+    Funcionalidad: Divide las ubicaciones de cada seccion en bloques de 16 espacios
+    (4x4), conservando el titulo de la seccion en cada bloque.
+    Entrada:
+    - todasUbicaciones (dict): Diccionario con las llaves generales,
+      especiales y electrico, cada una con una lista de ubicaciones.
+    Salida:
+    - bloques (list): Lista de diccionarios con titulo y ubicaciones.
+    """
+    espaciosPorBloque = 16
+    secciones = [
+        ("Generales", todasUbicaciones["generales"]),
+        ("Especiales", todasUbicaciones["especiales"]),
+        ("Vehiculo electrico", todasUbicaciones["electrico"])
+    ]
+    bloques = []
+    for titulo, ubicaciones in secciones:
+        inicio = 0
+        while inicio < len(ubicaciones):
+            fragmento = ubicaciones[inicio:inicio + espaciosPorBloque]
+            bloques.append({"titulo": titulo, "ubicaciones": fragmento})
+            inicio = inicio + espaciosPorBloque
+    return bloques
+
+def dibujarBloque(ventana, bloque, ubicacionesOcupadas, ventanaPrincipal, listaObjetos, catalogos):
+    """
+    Funcionalidad: Dibuja el titulo y la cuadricula 4x4 de un bloque del parqueo,
+    coloreando cada espacio segun su estado de ocupacion.
+    Entrada:
+    - ventana (Toplevel): Ventana donde se dibuja el bloque.
+    - bloque (dict): Diccionario con titulo y ubicaciones.
+    - ubicacionesOcupadas (set): Conjunto de ubicaciones ocupadas.
+    - ventanaPrincipal (Tk): Ventana principal del sistema.
+    - listaObjetos (list): Lista de objetos Estacionamiento.
+    - catalogos (dict): Diccionario de catalogos de marcas, colores y tipos.
+    Salida:
+    - None
+    """
+    columnas = 4
+    tk.Label(ventana, text=bloque["titulo"], font=("Arial", 12, "bold")).grid(row=0, column=0, columnspan=columnas, pady=(10, 5))
+    fila = 1
+    columna = 0
+    for ubicacion in bloque["ubicaciones"]:
+        if ubicacion in ubicacionesOcupadas:
+            color = "#FFB3B3"
+        else:
+            color = "#B3FFB3"
+        boton = tk.Button(
+            ventana,
+            text=ubicacion,
+            width=8,
+            height=3,
+            bg=color,
+            command=lambda u=ubicacion: manejarClicEspacio(ventanaPrincipal, u, listaObjetos, catalogos)
+        )
+        boton.grid(row=fila, column=columna, padx=2, pady=2)
+        columna = columna + 1
+        if columna >= columnas:
+            columna = 0
+            fila = fila + 1
+    return
+
+def cambiarBloque(ventana, bloques, indiceActual, ubicacionesOcupadas, ventanaPrincipal, listaObjetos, catalogos, direccion):
+    """
+    Funcionalidad: Cambia al bloque anterior o siguiente, limpiando la ventana y
+    redibujando el contenido correspondiente.
+    Entrada:
+    - ventana (Toplevel): Ventana del estacionamiento.
+    - bloques (list): Lista de bloques del parqueo.
+    - indiceActual (int): Indice del bloque actualmente mostrado.
+    - ubicacionesOcupadas (set): Conjunto de ubicaciones ocupadas.
+    - ventanaPrincipal (Tk): Ventana principal del sistema.
+    - listaObjetos (list): Lista de objetos Estacionamiento.
+    - catalogos (dict): Diccionario de catalogos de marcas, colores y tipos.
+    - direccion (int): -1 para retroceder, 1 para avanzar.
+    Salida:
+    - None
+    """
+    nuevoIndice = indiceActual + direccion
+    if nuevoIndice < 0:
+        nuevoIndice = 0
+    if nuevoIndice >= len(bloques):
+        nuevoIndice = len(bloques) - 1
+    for widget in ventana.winfo_children():
+        widget.destroy()
+    mostrarBloque(ventana, bloques, nuevoIndice, ubicacionesOcupadas, ventanaPrincipal, listaObjetos, catalogos)
+    return
+
+def mostrarBloque(ventana, bloques, indiceActual, ubicacionesOcupadas, ventanaPrincipal, listaObjetos, catalogos):
+    """
+    Funcionalidad:Muestra el bloque actual con su cuadricula, barra de servicios
+    y controles de navegacion.
+    Entrada:
+    - ventana (Toplevel): Ventana del estacionamiento.
+    - bloques (list): Lista de bloques del parqueo.
+    - indiceActual (int): Indice del bloque a mostrar.
+    - ubicacionesOcupadas (set): Conjunto de ubicaciones ocupadas.
+    - ventanaPrincipal (Tk): Ventana principal del sistema.
+    - listaObjetos (list): Lista de objetos Estacionamiento.
+    - catalogos (dict): Diccionario de catalogos de marcas, colores y tipos.
+    Salida:
+    - None
+    """
+    dibujarBloque(ventana, bloques[indiceActual], ubicacionesOcupadas, ventanaPrincipal, listaObjetos, catalogos)
+    filaServicios = 5
+    filaControles = 6
+    columnas = 4
+    tk.Label(ventana, text="Casetilla de cobro", font=("Arial", 11, "bold"), bg="#FFE0B3", highlightbackground="#CC9966", highlightthickness=3, width=20, height=3).grid(row=filaServicios, column=0, columnspan=2, padx=15, pady=(25, 10))
+    tk.Label(ventana, text="Bano sanitario", font=("Arial", 11, "bold"), bg="#B3E0FF", highlightbackground="#6699CC", highlightthickness=3, width=20, height=3).grid(row=filaServicios, column=2, columnspan=2, padx=15, pady=(25, 10))
+    tk.Button(ventana, text="Anterior", command=lambda: cambiarBloque(ventana, bloques, indiceActual, ubicacionesOcupadas, ventanaPrincipal, listaObjetos, catalogos, -1)).grid(row=filaControles, column=0, pady=15)
+    textoBloque = "Bloque " + str(indiceActual + 1) + " de " + str(len(bloques))
+    tk.Label(ventana, text=textoBloque).grid(row=filaControles, column=1, columnspan=2)
+    tk.Button(ventana, text="Siguiente", command=lambda: cambiarBloque(ventana, bloques, indiceActual, ubicacionesOcupadas, ventanaPrincipal, listaObjetos, catalogos, 1)).grid(row=filaControles, column=3, pady=15)
+    tk.Button(ventana, text="Regresar", command=ventana.destroy).grid(row=filaControles + 1, column=0, columnspan=columnas, pady=10)
+    return
+
+def verEstacionamiento(ventanaPrincipal):
+    """
+    Funcionalidad: Abre la ventana que muestra el mapa visual del parqueo en bloques
+    de 16 espacios con navegacion anterior/siguiente.
+    Entrada:
+    - ventanaPrincipal (Tk): Ventana principal del sistema.
+    Salida:
+    - None
+    """
+    config = cargarConfig()
+    listaObjetos = cargarBD()
+    catalogos = cargarCatalogos()
+    distribucion = calcularDistribucionEspacios(config["tamano"], config["tieneElectrico"])
+    todasUbicaciones = generarTodasLasUbicaciones(distribucion)
+    ubicacionesOcupadas = obtenerUbicacionesOcupadas(listaObjetos)
+    bloques = construirBloques(todasUbicaciones)
+    ventana = tk.Toplevel(ventanaPrincipal)
+    ventana.title("Ver estacionamiento")
+    ventana.resizable(False, False)
+    mostrarBloque(ventana, bloques, 0, ubicacionesOcupadas, ventanaPrincipal, listaObjetos, catalogos)
+    return
 
 def reportes():
     messagebox.showinfo("Info", "Proximamente: Reportes")
@@ -169,7 +324,7 @@ def construirInterfaz(ventana):
     tk.Label(ventana, text="Sistema de Parqueo", font=("Arial", 18, "bold")).pack(pady=20)
     listaBotones = [
         ("Obtener vehiculos", obtenerVehiculos),
-        ("Ver estacionamiento", verEstacionamiento),
+        ("Ver estacionamiento", lambda: verEstacionamiento(ventana)),
         ("Reportes", reportes),
         ("Configuracion", lambda: configuracion(ventana)),
         ("Acerca de", acercaDe),
