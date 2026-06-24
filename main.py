@@ -292,8 +292,29 @@ def configuracion(ventanaPrincipal):
     ventana.wait_window()
     return
 
-def acercaDe():
-    messagebox.showinfo("Info", "Proximamente: Acerca de")
+def acercaDe(ventanaPrincipal):
+    """
+    Funcionalidad:
+    Muestra la ventana 'Acerca de' con la informacion del sistema
+    y los desarrolladores del proyecto.
+    Entrada:ventanaPrincipal (Tk): Ventana principal del sistema.
+    Salida:None
+    """
+    ventana = tk.Toplevel(ventanaPrincipal)
+    ventana.title("Acerca de")
+    ventana.geometry("400x420")
+    ventana.resizable(False, False)
+    tk.Label(ventana, text="Sistema de Parqueo", font=("Arial", 18, "bold")).pack(pady=(20, 5))
+    tk.Label(ventana, text="Version 1.0 - 2026", font=("Arial", 10), fg="gray").pack()
+    tk.Frame(ventana, height=2, bg="#CCCCCC").pack(fill="x", padx=20, pady=15)
+    tk.Label(ventana, text="Desarrollado por:", font=("Arial", 11, "bold")).pack()
+    tk.Label(ventana, text="Jimena Acuña Parra", font=("Arial", 11)).pack(pady=3)
+    tk.Label(ventana, text="Guideon Montero Vargas", font=("Arial", 11)).pack(pady=3)
+    tk.Frame(ventana, height=2, bg="#CCCCCC").pack(fill="x", padx=20, pady=15)
+    tk.Label(ventana, text="Escuela de Ingeniería en Computación", font=("Arial", 9), fg="gray").pack()
+    tk.Label(ventana, text="Taller de Programación - I Semestre 2026", font=("Arial", 9), fg="gray").pack()
+    tk.Button(ventana, text="Regresar", command=ventana.destroy, width=15, height=2).pack(pady=20)
+    return
 
 # Ventana principal
 def verificarConfiguracionInicial(ventana):
@@ -327,7 +348,7 @@ def construirInterfaz(ventana):
         ("Ver estacionamiento", lambda: verEstacionamiento(ventana)),
         ("Reportes", reportes),
         ("Configuracion", lambda: configuracion(ventana)),
-        ("Acerca de", acercaDe),
+        ("Acerca de", lambda: acercaDe(ventana)),
     ]
     for texto, comando in listaBotones:
         tk.Button(ventana, text=texto, command=comando, width=28, height=2, font=("Arial", 11)).pack(pady=5)
