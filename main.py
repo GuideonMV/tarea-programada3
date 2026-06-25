@@ -7,9 +7,70 @@ from funcionamiento.api import obtenerDatosMockaroo, filtrarRegistros, obtenerLi
 from funcionamiento.calculosParqueo import calcularDistribucionEspacios, obtenerUbicacionesOcupadas, buscarObjetoPorUbicacion
 from funcionamiento.catalogos import construirCatalogos
 from funcionamiento.llenadoMasivo import generarUbicacionesGenerales, construirListaObjetos, generarTodasLasUbicaciones
+from funcionamiento.vouchers import generarVouchersListaObjetos
 
 def obtenerVehiculos():
-    messagebox.showinfo("Info", "Proximamente: Obtener vehiculos")
+    """
+    Funcionalidad:
+    Llena masivamente el parqueo consultando el API de Mockaroo,
+    actualiza la base de datos en disco y genera los vouchers PDF
+    con codigo QR en memoria para cada vehiculo estacionado.
+    Solo se ejecuta si el parqueo no ha sido llenado previamente.
+    Entrada:
+    - Ninguna
+    Salida:
+    - None
+    """
+    config = cargarConfig()
+    if config is None:
+        messagebox.showerror("Error", "Debe configurar el parqueo primero")
+        return
+    listaExistente = cargarBD()
+    if listaExistente:
+        messagebox.showwarning(
+            "Parqueo ocupado",
+            "El parqueo ya tiene " + str(len(listaExistente)) + " vehiculos registrados.\n"
+            "Para volver a llenarlo debe reiniciar el sistema."
+        )
+        return
+    respuesta = messagebox.askyesno(
+        "Obtener vehiculos",
+        "Esto llenara el parqueo masivamente y generara los vouchers.\n¿Desea continuar?"
+    )
+    if not respuesta:
+        return
+    distribucion = calcularDistribucionEspacios(config["tamano"], config["tieneElectrico"])
+    registrosExploracion = obtenerDatosMockaroo(100)
+    if not registrosExploracion:
+        messagebox.showerror("Error de conexion", "No se pudo conectar al API de Mockaroo.\nVerifique su conexion a internet e intente de nuevo.")
+        return
+    registrosLlenado = obtenerDatosMockaroo(distribucion["topeMasivo"])
+    if not registrosLlenado:
+        messagebox.showerror("Error de conexion", "No se pudo obtener los vehiculos del API.\nVerifique su conexion a internet e intente de nuevo.")
+        return
+    listasUnicas = obtenerListasUnicas(registrosExploracion)
+    catalogos = construirCatalogos(listasUnicas)
+    guardarCatalogos(catalogos)
+    diccionarioPlacas = filtrarRegistros(registrosLlenado)
+    ubicaciones = generarUbicacionesGenerales(distribucion["porAsignar"])
+    listaObjetos = construirListaObjetos(diccionarioPlacas, ubicaciones, catalogos)
+    guardarBD(listaObjetos)
+    if not listaObjetos:
+        messagebox.showerror("Error", "El API no devolvio vehiculos validos.")
+        return
+    errores = generarVouchersListaObjetos(listaObjetos, catalogos, config["montoHora"])
+    if errores == 0:
+        messagebox.showinfo(
+            "Completado",
+            "Se estacionaron " + str(len(listaObjetos)) + " vehiculos.\nVouchers guardados en la carpeta vouchers/"
+        )
+    else:
+        messagebox.showwarning(
+            "Completado con advertencias",
+            "Vehiculos estacionados: " + str(len(listaObjetos)) + "\n" +
+            "Vouchers con error: " + str(errores)
+        )
+    return
 
 def manejarClicEspacio(ventanaPrincipal, ubicacion, listaObjetos, catalogos):
     """
@@ -344,7 +405,7 @@ def construirInterfaz(ventana):
     """
     tk.Label(ventana, text="Sistema de Parqueo", font=("Arial", 18, "bold")).pack(pady=20)
     listaBotones = [
-        ("Obtener vehiculos", obtenerVehiculos),
+        ("Obtener vehiculos", lambda: obtenerVehiculos()),
         ("Ver estacionamiento", lambda: verEstacionamiento(ventana)),
         ("Reportes", reportes),
         ("Configuracion", lambda: configuracion(ventana)),
