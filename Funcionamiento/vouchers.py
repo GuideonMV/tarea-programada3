@@ -116,3 +116,50 @@ def generarVouchersListaObjetos(listaObjetos, catalogos, montoHora):
         except Exception:
             errores = errores + 1
     return errores
+
+def generarFacturaPDF(objeto, catalogos, monto):
+    """
+    Funcionalidad:
+    Genera la factura en formato PDF de un vehiculo que acaba de pagar,
+    incluyendo informacion completa de la estadia, monto cobrado y un
+    codigo QR. No utiliza el modulo os.
+    Entrada:
+    - objeto (Estacionamiento): Objeto con los datos completos del vehiculo.
+    - catalogos (dict): Diccionario de catalogos de marcas, colores y tipos.
+    - monto (int): Monto total cobrado en colones.
+    Salida:
+    - rutaFactura (str): Ruta del archivo .pdf generado.
+    """
+    textoMarca = obtenerTextoPorCodigo(catalogos["marcas"], objeto.marca)
+    textoColor = obtenerTextoPorCodigo(catalogos["colores"], objeto.color)
+    textoTipo  = obtenerTextoPorCodigo(catalogos["tipos"],  objeto.tipo)
+    catalogoPagos = {1: "Efectivo", 2: "SINPE", 3: "Tarjeta"}
+    textoPago = catalogoPagos[objeto.tipoPago]
+    fechaHora     = objeto.fechaHoraEntrada.replace(":", "-").replace(" ", "_")
+    nombreArchivo = "factura_#" + objeto.placa + "_" + fechaHora + ".pdf"
+    rutaFactura   = carpetaVouchers + "/" + nombreArchivo
+    rutaImagenQR  = generarImagenQR(objeto, catalogos)
+    pdf = canvas.Canvas(rutaFactura, pagesize=letter)
+    anchoPagina, altoPagina = letter
+    pdf.setFont("Helvetica-Bold", 16)
+    pdf.drawString(50, altoPagina - 60, "Factura de Estacionamiento")
+    pdf.setFont("Helvetica", 11)
+    lineas = [
+        "Placa: " + objeto.placa,
+        "Marca: " + textoMarca,
+        "Color: " + textoColor,
+        "Tipo: " + textoTipo,
+        "Ubicacion: " + objeto.ubicacion,
+        "Fecha y hora de entrada: " + objeto.fechaHoraEntrada,
+        "Fecha y hora de salida: " + objeto.fechaHoraSalida,
+        "Tipo de pago: " + textoPago,
+        "Monto cobrado: " + "{:,}".format(monto) + " colones",
+    ]
+    posicionY = altoPagina - 100
+    for linea in lineas:
+        pdf.drawString(50, posicionY, linea)
+        posicionY = posicionY - 20
+    pdf.drawImage(rutaImagenQR, 50, posicionY - 160, width=150, height=150)
+    pdf.save()
+    eliminarQRTemp()
+    return rutaFactura

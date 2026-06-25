@@ -1,12 +1,15 @@
 import tkinter as tk
-import tkinter as tk
+import datetime
+from tkinter import ttk
 from tkinter import messagebox
 
 from funcionamiento.baseDatos import guardarConfig, cargarConfig, existeConfig, guardarBD, guardarCatalogos, cargarCatalogos, cargarBD
 from funcionamiento.api import obtenerDatosMockaroo, filtrarRegistros, obtenerListasUnicas
-from funcionamiento.calculosParqueo import calcularDistribucionEspacios, obtenerUbicacionesOcupadas, buscarObjetoPorUbicacion
-from funcionamiento.catalogos import construirCatalogos
+from funcionamiento.calculosParqueo import calcularDistribucionEspacios, obtenerUbicacionesOcupadas, buscarObjetoPorUbicacion, obtenerUbicacionesLibres, calcularMonto
+from funcionamiento.catalogos import construirCatalogos, obtenerCodigoPorTexto, obtenerTextoPorCodigo
 from funcionamiento.llenadoMasivo import generarUbicacionesGenerales, construirListaObjetos, generarTodasLasUbicaciones
+from funcionamiento.vouchers import generarVoucherPDF
+from modelos.estacionamiento import Estacionamiento
 from funcionamiento.vouchers import generarVouchersListaObjetos
 
 def obtenerVehiculos():
@@ -72,12 +75,13 @@ def obtenerVehiculos():
         )
     return
 
-def manejarClicEspacio(ventanaPrincipal, ubicacion, listaObjetos, catalogos):
+def manejarClicEspacio(ventanaPrincipal, ventanaEstacionamiento, ubicacion, listaObjetos, catalogos):
     """
     Funcionalidad: Maneja el clic sobre un espacio del parqueo. Si esta ocupado
-    muestra info del vehiculo, si esta libre permite estacionar.
+    muestra info del vehiculo, si esta libre abre la ventana para estacionar.
     Entrada:
     - ventanaPrincipal (Tk): Ventana principal del sistema.
+    - ventanaEstacionamiento (Toplevel): Ventana de "Ver estacionamiento" abierta.
     - ubicacion (str): Identificador del espacio clickeado.
     - listaObjetos (list): Lista de objetos Estacionamiento.
     - catalogos (dict): Diccionario de catalogos de marcas, colores y tipos.
@@ -86,9 +90,140 @@ def manejarClicEspacio(ventanaPrincipal, ubicacion, listaObjetos, catalogos):
     """
     objeto = buscarObjetoPorUbicacion(listaObjetos, ubicacion)
     if objeto is None:
-        messagebox.showinfo("Espacio libre", "Espacio " + ubicacion + " esta libre, proximamente: Estacionar")
+        ventanaEstacionarVehiculo(ventanaPrincipal, ventanaEstacionamiento, ubicacion, listaObjetos, catalogos)
     else:
-        messagebox.showinfo("Espacio ocupado", "Espacio " + ubicacion + " ocupado por placa " + objeto.placa + ", proximamente: Observar espacio")
+        ventanaObservarEspacio(ventanaPrincipal, ventanaEstacionamiento, objeto, listaObjetos, catalogos)
+    return
+
+def obtenerSiguienteId(listaObjetos):
+    """
+    Funcionalidad: Calcula el siguiente id disponible para un nuevo objeto
+    Estacionamiento, en funcion del id maximo ya usado en la lista.
+    Entrada:
+    - listaObjetos (list): Lista de objetos Estacionamiento.
+    Salida:
+    - siguienteId (int): Id consecutivo a utilizar para el proximo registro.
+    """
+    idMaximo = 0
+    for objeto in listaObjetos:
+        if objeto.id > idMaximo:
+            idMaximo = objeto.id
+    return idMaximo + 1
+
+def confirmarEstacionar(ventana, ventanaPrincipal, ventanaEstacionamiento, listaObjetos, catalogos, comboUbicacion, entradaPlaca, comboMarca, comboTipo, comboColor):
+    """
+    Funcionalidad: Valida los datos ingresados, confirma la accion con el usuario
+    (pues implica un cobro), registra el nuevo vehiculo en la lista de objetos,
+    actualiza la BD en memoria secundaria y genera el voucher en PDF con QR.
+    Entrada:
+    - ventana (Toplevel): Ventana de "Estacionar un vehiculo" a cerrar al finalizar.
+    - ventanaPrincipal (Tk): Ventana principal del sistema.
+    - ventanaEstacionamiento (Toplevel): Ventana de "Ver estacionamiento" a refrescar.
+    - listaObjetos (list): Lista de objetos Estacionamiento.
+    - catalogos (dict): Diccionario de catalogos de marcas, colores y tipos.
+    - comboUbicacion (Combobox): Combo con la ubicacion seleccionada.
+    - entradaPlaca (Entry): Campo de texto con la placa.
+    - comboMarca (Combobox): Combo con la marca seleccionada.
+    - comboTipo (Combobox): Combo con el tipo de vehiculo seleccionado.
+    - comboColor (Combobox): Combo (editable) con el color seleccionado.
+    Salida:
+    - None
+    """
+    ubicacion = comboUbicacion.get().strip()
+    placa = entradaPlaca.get().strip()
+    textoMarca = comboMarca.get().strip()
+    textoTipo = comboTipo.get().strip()
+    textoColor = comboColor.get().strip()
+    if ubicacion == "" or placa == "" or textoMarca == "" or textoTipo == "" or textoColor == "":
+        messagebox.showerror("Error", "Todos los campos son obligatorios")
+        return
+    config = cargarConfig()
+    respuesta = messagebox.askyesno(
+        "Confirmar estacionamiento",
+        "Se reservara el espacio " + ubicacion + " para la placa " + placa +
+        ".\nCosto por hora: " + str(config["montoHora"]) + " colones.\n¿Desea continuar?"
+    )
+    if not respuesta:
+        return
+    codigoMarca = obtenerCodigoPorTexto(catalogos["marcas"], textoMarca)
+    codigoColor = obtenerCodigoPorTexto(catalogos["colores"], textoColor)
+    codigoTipo = obtenerCodigoPorTexto(catalogos["tipos"], textoTipo)
+    horaEntrada = datetime.datetime.now().strftime("%d-%m-%Y %H:%M")
+    siguienteId = obtenerSiguienteId(listaObjetos)
+    nuevoObjeto = Estacionamiento(
+        siguienteId,
+        placa,
+        codigoMarca,
+        codigoColor,
+        codigoTipo,
+        ubicacion,
+        horaEntrada,
+        "",
+        0,
+        0
+    )
+    listaObjetos.append(nuevoObjeto)
+    guardarBD(listaObjetos)
+    guardarCatalogos(catalogos)
+    rutaVoucher = generarVoucherPDF(nuevoObjeto, catalogos, config["montoHora"])
+    messagebox.showinfo("Vehiculo estacionado", "Vehiculo estacionado en " + ubicacion + ".\nVoucher generado en: " + rutaVoucher)
+    ventana.destroy()
+    ventanaEstacionamiento.destroy()
+    verEstacionamiento(ventanaPrincipal)
+    return
+
+def ventanaEstacionarVehiculo(ventanaPrincipal, ventanaEstacionamiento, ubicacion, listaObjetos, catalogos):
+    """
+    Funcionalidad: Abre la ventana para registrar y estacionar un vehiculo en un
+    espacio libre del parqueo. El usuario escribe la placa y selecciona ubicacion,
+    marca, tipo y color desde listas; la hora de entrada se llena automaticamente.
+    Entrada:
+    - ventanaPrincipal (Tk): Ventana principal del sistema.
+    - ventanaEstacionamiento (Toplevel): Ventana de "Ver estacionamiento" abierta.
+    - ubicacion (str): Ubicacion del espacio libre clickeado (preseleccionada).
+    - listaObjetos (list): Lista de objetos Estacionamiento.
+    - catalogos (dict): Diccionario de catalogos de marcas, colores y tipos.
+    Salida:
+    - None
+    """
+    config = cargarConfig()
+    distribucion = calcularDistribucionEspacios(config["tamano"], config["tieneElectrico"])
+    todasUbicaciones = generarTodasLasUbicaciones(distribucion)
+    ubicacionesOcupadas = obtenerUbicacionesOcupadas(listaObjetos)
+    ubicacionesLibres = obtenerUbicacionesLibres(todasUbicaciones, ubicacionesOcupadas)
+    ventana = tk.Toplevel(ventanaPrincipal)
+    ventana.title("Estacionar un vehiculo")
+    ventana.geometry("380x320")
+    ventana.resizable(False, False)
+    tk.Label(ventana, text="Estacionar un vehiculo", font=("Arial", 14, "bold")).grid(row=0, column=0, columnspan=2, pady=10)
+    tk.Label(ventana, text="Ubicacion:").grid(row=1, column=0, sticky="e", padx=5, pady=5)
+    comboUbicacion = ttk.Combobox(ventana, values=ubicacionesLibres, state="readonly")
+    if ubicacion in ubicacionesLibres:
+        comboUbicacion.set(ubicacion)
+    elif len(ubicacionesLibres) > 0:
+        comboUbicacion.set(ubicacionesLibres[0])
+    comboUbicacion.grid(row=1, column=1, sticky="w", padx=5, pady=5)
+    tk.Label(ventana, text="Placa:").grid(row=2, column=0, sticky="e", padx=5, pady=5)
+    entradaPlaca = tk.Entry(ventana)
+    entradaPlaca.grid(row=2, column=1, sticky="w", padx=5, pady=5)
+    tk.Label(ventana, text="Marca:").grid(row=3, column=0, sticky="e", padx=5, pady=5)
+    comboMarca = ttk.Combobox(ventana, values=list(catalogos["marcas"].values()), state="normal")
+    comboMarca.grid(row=3, column=1, sticky="w", padx=5, pady=5)
+    tk.Label(ventana, text="Tipo:").grid(row=4, column=0, sticky="e", padx=5, pady=5)
+    comboTipo = ttk.Combobox(ventana, values=list(catalogos["tipos"].values()), state="normal")
+    comboTipo.grid(row=4, column=1, sticky="w", padx=5, pady=5)
+    tk.Label(ventana, text="Color:").grid(row=5, column=0, sticky="e", padx=5, pady=5)
+    comboColor = ttk.Combobox(ventana, values=list(catalogos["colores"].values()), state="normal")
+    comboColor.grid(row=5, column=1, sticky="w", padx=5, pady=5)
+    tk.Label(ventana, text="Hora de entrada:").grid(row=6, column=0, sticky="e", padx=5, pady=5)
+    horaActual = datetime.datetime.now().strftime("%d-%m-%Y %H:%M")
+    entradaHora = tk.Entry(ventana)
+    entradaHora.insert(0, horaActual)
+    entradaHora.config(state="readonly")
+    entradaHora.grid(row=6, column=1, sticky="w", padx=5, pady=5)
+    tk.Button(ventana, text="Estacionar", width=12, command=lambda: confirmarEstacionar(ventana, ventanaPrincipal, ventanaEstacionamiento, listaObjetos, catalogos, comboUbicacion, entradaPlaca, comboMarca, comboTipo, comboColor)).grid(row=7, column=0, pady=20)
+    tk.Button(ventana, text="Regresar", width=12, command=ventana.destroy).grid(row=7, column=1, pady=20)
+    ventana.grab_set()
     return
 
 def construirBloques(todasUbicaciones):
@@ -139,14 +274,7 @@ def dibujarBloque(ventana, bloque, ubicacionesOcupadas, ventanaPrincipal, listaO
             color = "#FFB3B3"
         else:
             color = "#B3FFB3"
-        boton = tk.Button(
-            ventana,
-            text=ubicacion,
-            width=8,
-            height=3,
-            bg=color,
-            command=lambda u=ubicacion: manejarClicEspacio(ventanaPrincipal, u, listaObjetos, catalogos)
-        )
+        boton = tk.Button( ventana, text=ubicacion, width=8, height=3, bg=color, command=lambda u=ubicacion: manejarClicEspacio(ventanaPrincipal, ventana, u, listaObjetos, catalogos))
         boton.grid(row=fila, column=columna, padx=2, pady=2)
         columna = columna + 1
         if columna >= columnas:
@@ -228,6 +356,130 @@ def verEstacionamiento(ventanaPrincipal):
     ventana.title("Ver estacionamiento")
     ventana.resizable(False, False)
     mostrarBloque(ventana, bloques, 0, ubicacionesOcupadas, ventanaPrincipal, listaObjetos, catalogos)
+    return
+
+def ventanaConfirmarPago(ventanaPadre, textoPago, monto):
+    """
+    Funcionalidad:
+    Muestra una ventana de confirmacion de pago con botones en espanol
+    y retorna True si el usuario confirmo, False si cancelo.
+    Entrada:
+    - ventanaPadre (Toplevel): Ventana padre sobre la que se abre.
+    - textoPago (str): Tipo de pago seleccionado como texto.
+    - monto (int): Monto calculado a cobrar en colones.
+    Salida:
+    - confirmado (bool): True si el usuario presiono Confirmar, False si cancelo.
+    """
+    ventana = tk.Toplevel(ventanaPadre)
+    ventana.title("Confirmar pago")
+    ventana.geometry("300x150")
+    ventana.resizable(False, False)
+    ventana.grab_set()
+    resultado = tk.BooleanVar(value=False)
+    tk.Label(ventana, text="Tipo de pago: " + textoPago + "\nMonto a cobrar: " + "{:,}".format(monto) + " colones.\n¿Confirmar pago?", font=("Arial", 11),justify="center").pack(pady=20)
+    marcosBotones = tk.Frame(ventana)
+    marcosBotones.pack()
+    tk.Button(marcosBotones, text="Confirmar", width=12, command=lambda: [resultado.set(True), ventana.destroy()]).pack(side="left", padx=10)
+    tk.Button(marcosBotones, text="Cancelar", width=12, command=ventana.destroy).pack(side="left", padx=10)
+    ventana.wait_window()
+    return resultado.get()
+
+def confirmarPago(ventana, ventanaPrincipal, ventanaEstacionamiento, objeto, listaObjetos, catalogos, comboPago):
+    """
+    Funcionalidad:
+    Procesa el pago de un vehiculo: valida el tipo de pago, calcula el monto,
+    abre una ventana de confirmacion en espanol, registra hora de salida,
+    tipo de pago y monto en el objeto, guarda la BD, genera la factura PDF
+    y refresca el estacionamiento automaticamente.
+    Entrada:
+    - ventana (Toplevel): Ventana de observar espacio a cerrar al finalizar.
+    - ventanaPrincipal (Tk): Ventana principal del sistema.
+    - ventanaEstacionamiento (Toplevel): Ventana de ver estacionamiento a refrescar.
+    - objeto (Estacionamiento): Objeto del vehiculo a pagar.
+    - listaObjetos (list): Lista de objetos Estacionamiento.
+    - catalogos (dict): Diccionario de catalogos de marcas, colores y tipos.
+    - comboPago (Combobox): Combo con el tipo de pago seleccionado.
+    Salida:
+    - None
+    """
+    textoPago = comboPago.get().strip()
+    if textoPago == "":
+        messagebox.showerror("Error", "Debe seleccionar un tipo de pago")
+        return
+    config = cargarConfig()
+    catalogoPagos = {"Efectivo": 1, "SINPE": 2, "Tarjeta": 3}
+    tipoPago = catalogoPagos[textoPago]
+    monto = calcularMonto(objeto.fechaHoraEntrada, config["montoHora"], config["tiempoGracia"])
+    confirmado = ventanaConfirmarPago(ventana, textoPago, monto)
+    if not confirmado:
+        return
+    horaSalida = datetime.datetime.now().strftime("%d-%m-%Y %H:%M")
+    objeto.fechaHoraSalida = horaSalida
+    objeto.tipoPago = tipoPago
+    objeto.monto = monto
+    guardarBD(listaObjetos)
+    from funcionamiento.vouchers import generarFacturaPDF
+    rutaFactura = generarFacturaPDF(objeto, catalogos, monto)
+    messagebox.showinfo(
+        "Pago registrado",
+        "Pago exitoso. El espacio " + objeto.ubicacion + " ha sido desocupado.\nFactura generada en: " + rutaFactura
+    )
+    ventana.destroy()
+    ventanaEstacionamiento.destroy()
+    verEstacionamiento(ventanaPrincipal)
+    return
+
+def ventanaObservarEspacio(ventanaPrincipal, ventanaEstacionamiento, objeto, listaObjetos, catalogos):
+    """
+    Funcionalidad:
+    Abre la ventana para observar la informacion de un espacio ocupado.
+    Muestra los datos del vehiculo en modo solo lectura y permite pagar
+    o regresar.
+    Entrada:
+    - ventanaPrincipal (Tk): Ventana principal del sistema.
+    - ventanaEstacionamiento (Toplevel): Ventana de ver estacionamiento abierta.
+    - objeto (Estacionamiento): Objeto del vehiculo estacionado.
+    - listaObjetos (list): Lista de objetos Estacionamiento.
+    - catalogos (dict): Diccionario de catalogos de marcas, colores y tipos.
+    Salida:
+    - None
+    """
+    config = cargarConfig()
+    textoMarca = obtenerTextoPorCodigo(catalogos["marcas"], objeto.marca)
+    textoColor = obtenerTextoPorCodigo(catalogos["colores"], objeto.color)
+    ventana = tk.Toplevel(ventanaPrincipal)
+    ventana.title("Observar espacio")
+    ventana.geometry("380x320")
+    ventana.resizable(False, False)
+    tk.Label(ventana, text="Informacion del espacio", font=("Arial", 14, "bold")).grid(row=0, column=0, columnspan=2, pady=10)
+    tk.Label(ventana, text="#Campo:").grid(row=1, column=0, sticky="e", padx=5, pady=5)
+    comboUbicacion = ttk.Combobox(ventana, values=[objeto.ubicacion], state="readonly")
+    comboUbicacion.set(objeto.ubicacion)
+    comboUbicacion.grid(row=1, column=1, sticky="w", padx=5, pady=5)
+    tk.Label(ventana, text="Placa:").grid(row=2, column=0, sticky="e", padx=5, pady=5)
+    entradaPlaca = tk.Entry(ventana)
+    entradaPlaca.insert(0, objeto.placa)
+    entradaPlaca.config(state="readonly")
+    entradaPlaca.grid(row=2, column=1, sticky="w", padx=5, pady=5)
+    tk.Label(ventana, text="Marca:").grid(row=3, column=0, sticky="e", padx=5, pady=5)
+    comboMarca = ttk.Combobox(ventana, values=[textoMarca], state="readonly")
+    comboMarca.set(textoMarca)
+    comboMarca.grid(row=3, column=1, sticky="w", padx=5, pady=5)
+    tk.Label(ventana, text="Color:").grid(row=4, column=0, sticky="e", padx=5, pady=5)
+    comboColor = ttk.Combobox(ventana, values=[textoColor], state="readonly")
+    comboColor.set(textoColor)
+    comboColor.grid(row=4, column=1, sticky="w", padx=5, pady=5)
+    tk.Label(ventana, text="Hora de entrada:").grid(row=5, column=0, sticky="e", padx=5, pady=5)
+    entradaHora = tk.Entry(ventana)
+    entradaHora.insert(0, objeto.fechaHoraEntrada)
+    entradaHora.config(state="readonly")
+    entradaHora.grid(row=5, column=1, sticky="w", padx=5, pady=5)
+    tk.Label(ventana, text="Tipo de pago:").grid(row=6, column=0, sticky="e", padx=5, pady=5)
+    comboPago = ttk.Combobox(ventana, values=["Efectivo", "SINPE", "Tarjeta"], state="readonly")
+    comboPago.grid(row=6, column=1, sticky="w", padx=5, pady=5)
+    tk.Button(ventana, text="Pagar", width=12, command=lambda: confirmarPago(ventana, ventanaPrincipal, ventanaEstacionamiento, objeto, listaObjetos, catalogos, comboPago)).grid(row=7, column=0, pady=20)
+    tk.Button(ventana, text="Regresar", width=12, command=ventana.destroy).grid(row=7, column=1, pady=20)
+    ventana.grab_set()
     return
 
 def reportes():
