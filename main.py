@@ -505,6 +505,27 @@ def validarCamposConfiguracion(tamano, gracia, monto):
         return False
     return True
 
+def validarReduccionTamano(listaObjetos, nuevaDistribucion):
+    """
+    Funcionalidad: Verifica que todos los vehiculos actualmente estacionados
+    sigan teniendo un espacio valido dentro de la nueva distribucion antes
+    de permitir el cambio de tamano (o de configuracion electrica) del
+    estacionamiento.
+    Entrada:
+    - listaObjetos (list): Lista de objetos Estacionamiento actualmente guardados.
+    - nuevaDistribucion (dict): Distribucion calculada para el nuevo tamano.
+    Salida:
+    - esValido (bool): True si todas las ubicaciones ocupadas siguen existiendo
+      en la nueva distribucion, False en caso contrario.
+    """
+    nuevasUbicaciones = generarTodasLasUbicaciones(nuevaDistribucion)
+    todasNuevas = set(nuevasUbicaciones["generales"]) | set(nuevasUbicaciones["especiales"]) | set(nuevasUbicaciones["electrico"])
+    ubicacionesOcupadas = obtenerUbicacionesOcupadas(listaObjetos)
+    for ubicacion in ubicacionesOcupadas:
+        if ubicacion not in todasNuevas:
+            return False
+    return True
+
 def ejecutarLlenadoInicial(config):
     """
     Funcionalidad: Ejecuta el llenado masivo inicial: calcula distribucion, consulta
@@ -531,7 +552,10 @@ def ejecutarLlenadoInicial(config):
 def guardarConfiguracion(ventana, entradaTamano, entradaGracia, entradaMonto, variableElectrico, esConfiguracionNueva):
     """
     Funcionalidad: Valida y guarda los datos de configuracion. Si es la primera vez,
-    ejecuta el llenado masivo. Si ya existia, pide confirmacion.
+    ejecuta el llenado masivo. Si ya existia, permite modificar el tamano,
+    tiempo de gracia, monto y espacio electrico, validando que un cambio de
+    tamano o de espacio electrico no deje sin ubicacion valida a vehiculos
+    ya estacionados, y pide confirmacion antes de aplicar los cambios.
     Entrada:
     - ventana (Toplevel): Ventana de configuracion a cerrar al finalizar.
     - entradaTamano (Entry): Campo del tamano del estacionamiento.
@@ -548,15 +572,30 @@ def guardarConfiguracion(ventana, entradaTamano, entradaGracia, entradaMonto, va
     if not validarCamposConfiguracion(tamanoTexto, graciaTexto, montoTexto):
         messagebox.showerror("Error", "Los campos deben ser numeros enteros validos")
         return
+    nuevoTamano = int(tamanoTexto)
+    nuevoTieneElectrico = variableElectrico.get()
     if not esConfiguracionNueva:
+        configActual = cargarConfig()
+        listaObjetos = cargarBD()
+        cambioRelevante = (nuevoTamano != configActual["tamano"]) or (nuevoTieneElectrico != configActual["tieneElectrico"])
+        if cambioRelevante and listaObjetos:
+            nuevaDistribucion = calcularDistribucionEspacios(nuevoTamano, nuevoTieneElectrico)
+            if not validarReduccionTamano(listaObjetos, nuevaDistribucion):
+                messagebox.showerror(
+                    "Cambio no permitido",
+                    "No se puede aplicar este cambio porque hay vehiculos estacionados\n"
+                    "en espacios que dejarian de existir con la nueva configuracion.\n"
+                    "Libere esos espacios o elija un tamano mayor."
+                )
+                return
         respuesta = messagebox.askyesno("Confirmar", "Desea actualizar la configuracion del parqueo")
         if not respuesta:
             return
     config = {
-        "tamano": int(tamanoTexto),
+        "tamano": nuevoTamano,
         "tiempoGracia": int(graciaTexto),
         "montoHora": int(montoTexto),
-        "tieneElectrico": variableElectrico.get()
+        "tieneElectrico": nuevoTieneElectrico
     }
     guardarConfig(config)
     if esConfiguracionNueva:
@@ -599,7 +638,6 @@ def configuracion(ventanaPrincipal):
         entradaGracia.insert(0, str(configActual["tiempoGracia"]))
         entradaMonto.insert(0, str(configActual["montoHora"]))
         variableElectrico.set(configActual["tieneElectrico"])
-        entradaTamano.config(state="disabled")
     tk.Button(ventana,text="Guardar",command=lambda: guardarConfiguracion(ventana, entradaTamano, entradaGracia, entradaMonto, variableElectrico, esConfiguracionNueva)).grid(row=5, column=0, columnspan=2, pady=15)
     ventana.grab_set()
     ventana.wait_window()
