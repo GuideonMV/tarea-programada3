@@ -1,6 +1,13 @@
 import datetime
 import random
 
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import letter
+
+carpetaReportes = "reportes"
+catalogoPagos = {1: "Efectivo", 2: "SINPE", 3: "Tarjeta"}
+
+
 def cerrarVehiculosPendientes(listaObjetos):
     """
     Funcionalidad:
@@ -18,7 +25,6 @@ def cerrarVehiculosPendientes(listaObjetos):
             objeto.fechaHoraSalida = horaSalida
             objeto.tipoPago = random.randint(1, 3)
     return
-
 
 def calcularMontoObjeto(objeto, montoHora, tiempoGracia):
     """
@@ -43,7 +49,6 @@ def calcularMontoObjeto(objeto, montoHora, tiempoGracia):
     horasCobrar = (minutosTotal + 59) // 60
     return horasCobrar * montoHora
 
-
 def agruparPorTipoPago(listaObjetos):
     """
     Funcionalidad:
@@ -59,3 +64,113 @@ def agruparPorTipoPago(listaObjetos):
         if objeto.tipoPago in grupos:
             grupos[objeto.tipoPago].append(objeto)
     return grupos
+
+def crearEncabezadoPDF(pdf, altoPagina, fecha):
+    """
+    Funcionalidad:
+    Dibuja el titulo, la fecha y los encabezados de la tabla en el PDF.
+    Entrada:
+    - pdf (Canvas): Objeto canvas de reportlab.
+    - altoPagina (float): Altura de la pagina en puntos.
+    - fecha (str): Fecha del cierre en formato DD-MM-YYYY.
+    Salida:
+    - posicionY (float): Posicion Y lista para empezar a dibujar filas.
+    """
+    pdf.setFillColorRGB(0.1, 0.2, 0.6)
+    pdf.setFont("Helvetica-Bold", 18)
+    pdf.drawString(50, altoPagina - 50, "Cierre Diario del Parqueo")
+    pdf.setFillColorRGB(0.4, 0.4, 0.4)
+    pdf.setFont("Helvetica", 12)
+    pdf.drawString(50, altoPagina - 75, "Fecha: " + fecha)
+    encabezados = ["Ubicacion", "Placa", "Entrada", "Salida", "Pago", "Monto"]
+    posicionesX = [50, 110, 185, 285, 370, 440]
+    posicionY = altoPagina - 110
+    pdf.setFillColorRGB(0, 0, 0)
+    pdf.setFont("Helvetica-Bold", 10)
+    for i in range(len(encabezados)):
+        pdf.drawString(posicionesX[i], posicionY, encabezados[i])
+    posicionY = posicionY - 5
+    pdf.line(50, posicionY, 550, posicionY)
+    posicionY = posicionY - 15
+    return posicionY
+
+def procesarGrupoPDF(pdf, objetosGrupo, tipoPago, config, posicionY, altoPagina):
+    """
+    Funcionalidad:
+    Dibuja las filas de un grupo de tipo de pago y su subtotal.
+    Entrada:
+    - pdf (Canvas): Objeto canvas de reportlab.
+    - objetosGrupo (list): Lista de objetos del mismo tipo de pago.
+    - tipoPago (int): Codigo del tipo de pago.
+    - config (dict): Configuracion con montoHora y tiempoGracia.
+    - posicionY (float): Posicion Y de inicio.
+    - altoPagina (float): Altura de la pagina en puntos.
+    Salida:
+    - posicionY (float): Nueva posicion Y tras dibujar.
+    - subtotal (int): Monto subtotal del grupo.
+    """
+    posicionesX = [50, 110, 185, 285, 370, 440]
+    subtotal = 0
+    for objeto in objetosGrupo:
+        monto = calcularMontoObjeto(objeto, config["montoHora"], config["tiempoGracia"])
+        objeto.monto = monto
+        subtotal = subtotal + monto
+        if posicionY < 80:
+            pdf.showPage()
+            posicionY = altoPagina - 50
+        pdf.setFillColorRGB(0, 0, 0)
+        pdf.setFont("Helvetica", 9)
+        pdf.drawString(posicionesX[0], posicionY, objeto.ubicacion)
+        pdf.drawString(posicionesX[1], posicionY, objeto.placa)
+        pdf.drawString(posicionesX[2], posicionY, objeto.fechaHoraEntrada)
+        pdf.drawString(posicionesX[3], posicionY, objeto.fechaHoraSalida)
+        pdf.drawString(posicionesX[4], posicionY, catalogoPagos[objeto.tipoPago])
+        pdf.drawString(posicionesX[5], posicionY, "{:,}".format(monto))
+        posicionY = posicionY - 14
+    if posicionY < 80:
+        pdf.showPage()
+        posicionY = altoPagina - 50
+    pdf.setFillColorRGB(0.0, 0.5, 0.0)
+    pdf.setFont("Helvetica-Bold", 10)
+    pdf.drawString(300, posicionY, "Subtotal " + catalogoPagos[tipoPago] + ":")
+    pdf.drawString(440, posicionY, "{:,}".format(subtotal) + " colones")
+    posicionY = posicionY - 8
+    pdf.line(50, posicionY, 550, posicionY)
+    posicionY = posicionY - 15
+    return posicionY, subtotal
+
+def generarCierreDiarioPDF(listaObjetos, catalogos, config):
+    """
+    Funcionalidad:
+    Genera el reporte de cierre diario en formato PDF con una tabla que
+    incluye ubicacion, placa, hora de entrada, hora de salida, tipo de
+    pago y monto. Muestra subtotales por tipo de pago y total del dia.
+    Usa 3 colores y 3 tamanios de letra.
+    Entrada:
+    - listaObjetos (list): Lista de objetos Estacionamiento del dia.
+    - catalogos (dict): Diccionario de catalogos de marcas, colores y tipos.
+    - config (dict): Configuracion con montoHora y tiempoGracia.
+    Salida:
+    - rutaReporte (str): Ruta del archivo PDF generado.
+    """
+    fecha = datetime.datetime.now().strftime("%d-%m-%Y")
+    rutaReporte = carpetaReportes + "/cierre_diario_" + fecha + ".pdf"
+    pdf = canvas.Canvas(rutaReporte, pagesize=letter)
+    anchoPagina, altoPagina = letter
+    posicionY = crearEncabezadoPDF(pdf, altoPagina, fecha)
+    grupos = agruparPorTipoPago(listaObjetos)
+    totalDia = 0
+    for tipoPago in [1, 2, 3]:
+        if not grupos[tipoPago]:
+            continue
+        posicionY, subtotal = procesarGrupoPDF(pdf, grupos[tipoPago], tipoPago, config, posicionY, altoPagina)
+        totalDia = totalDia + subtotal
+    if posicionY < 80:
+        pdf.showPage()
+        posicionY = altoPagina - 50
+    pdf.setFillColorRGB(0.7, 0.0, 0.0)
+    pdf.setFont("Helvetica-Bold", 14)
+    pdf.drawString(300, posicionY, "TOTAL DEL DIA:")
+    pdf.drawString(440, posicionY, "{:,}".format(totalDia) + " colones")
+    pdf.save()
+    return rutaReporte
