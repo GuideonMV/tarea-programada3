@@ -1,4 +1,5 @@
 import tkinter as tk
+import re
 import datetime
 from tkinter import ttk
 from tkinter import messagebox
@@ -12,13 +13,14 @@ from funcionamiento.vouchers import generarVoucherPDF
 from modelos.estacionamiento import Estacionamiento
 from funcionamiento.vouchers import generarVouchersListaObjetos
 
+#Botón 1
 def obtenerVehiculos():
     """
     Funcionalidad:
     Llena masivamente el parqueo consultando el API de Mockaroo,
     actualiza la base de datos en disco y genera los vouchers PDF
     con codigo QR en memoria para cada vehiculo estacionado.
-    Solo se ejecuta si el parqueo no ha sido llenado previamente.
+    Solo se ejecuta si no hay vehiculos actualmente estacionados.
     Entrada:
     - Ninguna
     Salida:
@@ -29,17 +31,14 @@ def obtenerVehiculos():
         messagebox.showerror("Error", "Debe configurar el parqueo primero")
         return
     listaExistente = cargarBD()
-    if listaExistente:
-        messagebox.showwarning(
-            "Parqueo ocupado",
-            "El parqueo ya tiene " + str(len(listaExistente)) + " vehiculos registrados.\n"
-            "Para volver a llenarlo debe reiniciar el sistema."
-        )
+    vehiculosActivos = 0
+    for objeto in listaExistente:
+        if objeto.fechaHoraSalida == "":
+            vehiculosActivos = vehiculosActivos + 1
+    if vehiculosActivos > 0:
+        messagebox.showwarning("Parqueo ocupado", "El parqueo tiene " + str(vehiculosActivos) + " vehiculos actualmente estacionados.\n Para volver a llenarlo debe hacer el cierre diario primero.")
         return
-    respuesta = messagebox.askyesno(
-        "Obtener vehiculos",
-        "Esto llenara el parqueo masivamente y generara los vouchers.\n¿Desea continuar?"
-    )
+    respuesta = messagebox.askyesno("Obtener vehiculos", "Esto llenara el parqueo masivamente y generara los vouchers.\n¿Desea continuar?")
     if not respuesta:
         return
     distribucion = calcularDistribucionEspacios(config["tamano"], config["tieneElectrico"])
@@ -63,18 +62,12 @@ def obtenerVehiculos():
         return
     errores = generarVouchersListaObjetos(listaObjetos, catalogos, config["montoHora"])
     if errores == 0:
-        messagebox.showinfo(
-            "Completado",
-            "Se estacionaron " + str(len(listaObjetos)) + " vehiculos.\nVouchers guardados en la carpeta vouchers/"
-        )
+        messagebox.showinfo("Completado","Se estacionaron " + str(len(listaObjetos)) + " vehiculos.\nVouchers guardados en la carpeta vouchers/")
     else:
-        messagebox.showwarning(
-            "Completado con advertencias",
-            "Vehiculos estacionados: " + str(len(listaObjetos)) + "\n" +
-            "Vouchers con error: " + str(errores)
-        )
+        messagebox.showwarning("Completado con advertencias", "Vehiculos estacionados: " + str(len(listaObjetos)) + "\n" +"Vouchers con error: " + str(errores))
     return
 
+#Botón 2
 def manejarClicEspacio(ventanaPrincipal, ventanaEstacionamiento, ubicacion, listaObjetos, catalogos):
     """
     Funcionalidad: Maneja el clic sobre un espacio del parqueo. Si esta ocupado
@@ -110,6 +103,28 @@ def obtenerSiguienteId(listaObjetos):
             idMaximo = objeto.id
     return idMaximo + 1
 
+def validarPlaca(placa, listaObjetos):
+    """
+    Funcionalidad: Valida que la placa no este vacia, tenga un formato
+    razonable (letras y numeros, con o sin guion) y no corresponda a un
+    vehiculo que ya se encuentra actualmente estacionado en el parqueo.
+    Entrada:
+    - placa (str): Texto de la placa ingresada por el usuario.
+    - listaObjetos (list): Lista de objetos Estacionamiento actuales.
+    Salida:
+    - esValida (bool): True si la placa cumple el formato y no esta duplicada.
+    """
+    placa = placa.strip().upper()
+    if placa == "":
+        return False
+    patron = r"^([A-Z]{3}\d{3,4}|\d{4,6})$"
+    if not re.match(patron, placa):
+        return False
+    for objeto in listaObjetos:
+        if objeto.placa.strip().upper() == placa and objeto.fechaHoraSalida == "":
+            return None
+    return True
+
 def confirmarEstacionar(ventana, ventanaPrincipal, ventanaEstacionamiento, listaObjetos, catalogos, comboUbicacion, entradaPlaca, comboMarca, comboTipo, comboColor):
     """
     Funcionalidad: Valida los datos ingresados, confirma la accion con el usuario
@@ -130,19 +145,21 @@ def confirmarEstacionar(ventana, ventanaPrincipal, ventanaEstacionamiento, lista
     - None
     """
     ubicacion = comboUbicacion.get().strip()
-    placa = entradaPlaca.get().strip()
+    placa = entradaPlaca.get().strip().upper()
     textoMarca = comboMarca.get().strip()
     textoTipo = comboTipo.get().strip()
     textoColor = comboColor.get().strip()
     if ubicacion == "" or placa == "" or textoMarca == "" or textoTipo == "" or textoColor == "":
         messagebox.showerror("Error", "Todos los campos son obligatorios")
         return
+    if validarPlaca(placa, listaObjetos)==None:
+        messagebox.showerror("Error", "La placa ingresada ya se encuentra registrada en el estacionamiento")
+        return
+    if not validarPlaca(placa, listaObjetos):
+        messagebox.showerror("Error", "La placa no es valida")
+        return
     config = cargarConfig()
-    respuesta = messagebox.askyesno(
-        "Confirmar estacionamiento",
-        "Se reservara el espacio " + ubicacion + " para la placa " + placa +
-        ".\nCosto por hora: " + str(config["montoHora"]) + " colones.\n¿Desea continuar?"
-    )
+    respuesta = messagebox.askyesno("Confirmar estacionamiento", "Se reservara el espacio " + ubicacion + " para la placa " + placa + ".\nCosto por hora: " + str(config["montoHora"]) + " colones.\n¿Desea continuar?")
     if not respuesta:
         return
     codigoMarca = obtenerCodigoPorTexto(catalogos["marcas"], textoMarca)
@@ -150,18 +167,7 @@ def confirmarEstacionar(ventana, ventanaPrincipal, ventanaEstacionamiento, lista
     codigoTipo = obtenerCodigoPorTexto(catalogos["tipos"], textoTipo)
     horaEntrada = datetime.datetime.now().strftime("%d-%m-%Y %H:%M")
     siguienteId = obtenerSiguienteId(listaObjetos)
-    nuevoObjeto = Estacionamiento(
-        siguienteId,
-        placa,
-        codigoMarca,
-        codigoColor,
-        codigoTipo,
-        ubicacion,
-        horaEntrada,
-        "",
-        0,
-        0
-    )
+    nuevoObjeto = Estacionamiento(siguienteId, placa, codigoMarca, codigoColor, codigoTipo, ubicacion, horaEntrada, "", 0,0)
     listaObjetos.append(nuevoObjeto)
     guardarBD(listaObjetos)
     guardarCatalogos(catalogos)
@@ -174,12 +180,13 @@ def confirmarEstacionar(ventana, ventanaPrincipal, ventanaEstacionamiento, lista
 
 def ventanaEstacionarVehiculo(ventanaPrincipal, ventanaEstacionamiento, ubicacion, listaObjetos, catalogos):
     """
-    Funcionalidad: Abre la ventana para registrar y estacionar un vehiculo en un
-    espacio libre del parqueo. El usuario escribe la placa y selecciona ubicacion,
+    Funcionalidad:
+    Abre la ventana para registrar y estacionar un vehiculo en un espacio
+    libre del parqueo. El usuario escribe la placa y selecciona ubicacion,
     marca, tipo y color desde listas; la hora de entrada se llena automaticamente.
     Entrada:
     - ventanaPrincipal (Tk): Ventana principal del sistema.
-    - ventanaEstacionamiento (Toplevel): Ventana de "Ver estacionamiento" abierta.
+    - ventanaEstacionamiento (Toplevel): Ventana de ver estacionamiento abierta.
     - ubicacion (str): Ubicacion del espacio libre clickeado (preseleccionada).
     - listaObjetos (list): Lista de objetos Estacionamiento.
     - catalogos (dict): Diccionario de catalogos de marcas, colores y tipos.
@@ -195,6 +202,8 @@ def ventanaEstacionarVehiculo(ventanaPrincipal, ventanaEstacionamiento, ubicacio
     ventana.title("Estacionar un vehiculo")
     ventana.geometry("380x320")
     ventana.resizable(False, False)
+    ventana.columnconfigure(0, weight=1)
+    ventana.columnconfigure(1, weight=1)
     tk.Label(ventana, text="Estacionar un vehiculo", font=("Arial", 14, "bold")).grid(row=0, column=0, columnspan=2, pady=10)
     tk.Label(ventana, text="Ubicacion:").grid(row=1, column=0, sticky="e", padx=5, pady=5)
     comboUbicacion = ttk.Combobox(ventana, values=ubicacionesLibres, state="readonly")
@@ -207,13 +216,14 @@ def ventanaEstacionarVehiculo(ventanaPrincipal, ventanaEstacionamiento, ubicacio
     entradaPlaca = tk.Entry(ventana)
     entradaPlaca.grid(row=2, column=1, sticky="w", padx=5, pady=5)
     tk.Label(ventana, text="Marca:").grid(row=3, column=0, sticky="e", padx=5, pady=5)
-    comboMarca = ttk.Combobox(ventana, values=list(catalogos["marcas"].values()), state="normal")
+    comboMarca = ttk.Combobox(ventana, values=list(catalogos["marcas"].values()), state="readonly")
     comboMarca.grid(row=3, column=1, sticky="w", padx=5, pady=5)
     tk.Label(ventana, text="Tipo:").grid(row=4, column=0, sticky="e", padx=5, pady=5)
-    comboTipo = ttk.Combobox(ventana, values=list(catalogos["tipos"].values()), state="normal")
+    comboTipo = ttk.Combobox(ventana, values=list(catalogos["tipos"].values()), state="readonly")
     comboTipo.grid(row=4, column=1, sticky="w", padx=5, pady=5)
     tk.Label(ventana, text="Color:").grid(row=5, column=0, sticky="e", padx=5, pady=5)
-    comboColor = ttk.Combobox(ventana, values=list(catalogos["colores"].values()), state="normal")
+    coloresNormalizados = [c.capitalize() for c in catalogos["colores"].values()]
+    comboColor = ttk.Combobox(ventana, values=coloresNormalizados, state="normal")
     comboColor.grid(row=5, column=1, sticky="w", padx=5, pady=5)
     tk.Label(ventana, text="Hora de entrada:").grid(row=6, column=0, sticky="e", padx=5, pady=5)
     horaActual = datetime.datetime.now().strftime("%d-%m-%Y %H:%M")
@@ -328,7 +338,7 @@ def mostrarBloque(ventana, bloques, indiceActual, ubicacionesOcupadas, ventanaPr
     filaControles = 6
     columnas = 4
     tk.Label(ventana, text="Casetilla de cobro", font=("Arial", 11, "bold"), bg="#FFE0B3", highlightbackground="#CC9966", highlightthickness=3, width=20, height=3).grid(row=filaServicios, column=0, columnspan=2, padx=15, pady=(25, 10))
-    tk.Label(ventana, text="Bano sanitario", font=("Arial", 11, "bold"), bg="#B3E0FF", highlightbackground="#6699CC", highlightthickness=3, width=20, height=3).grid(row=filaServicios, column=2, columnspan=2, padx=15, pady=(25, 10))
+    tk.Label(ventana, text="Baño sanitario", font=("Arial", 11, "bold"), bg="#B3E0FF", highlightbackground="#6699CC", highlightthickness=3, width=20, height=3).grid(row=filaServicios, column=2, columnspan=2, padx=15, pady=(25, 10))
     tk.Button(ventana, text="Anterior", command=lambda: cambiarBloque(ventana, bloques, indiceActual, ubicacionesOcupadas, ventanaPrincipal, listaObjetos, catalogos, -1)).grid(row=filaControles, column=0, pady=15)
     textoBloque = "Bloque " + str(indiceActual + 1) + " de " + str(len(bloques))
     tk.Label(ventana, text=textoBloque).grid(row=filaControles, column=1, columnspan=2)
@@ -420,10 +430,7 @@ def confirmarPago(ventana, ventanaPrincipal, ventanaEstacionamiento, objeto, lis
     guardarBD(listaObjetos)
     from funcionamiento.vouchers import generarFacturaPDF
     rutaFactura = generarFacturaPDF(objeto, catalogos, monto)
-    messagebox.showinfo(
-        "Pago registrado",
-        "Pago exitoso. El espacio " + objeto.ubicacion + " ha sido desocupado.\nFactura generada en: " + rutaFactura
-    )
+    messagebox.showinfo("Pago registrado", "Pago exitoso. El espacio " + objeto.ubicacion + " ha sido desocupado.\nFactura generada en: " + rutaFactura)
     ventana.destroy()
     ventanaEstacionamiento.destroy()
     verEstacionamiento(ventanaPrincipal)
@@ -446,13 +453,15 @@ def ventanaObservarEspacio(ventanaPrincipal, ventanaEstacionamiento, objeto, lis
     """
     config = cargarConfig()
     textoMarca = obtenerTextoPorCodigo(catalogos["marcas"], objeto.marca)
-    textoColor = obtenerTextoPorCodigo(catalogos["colores"], objeto.color)
+    textoColor = obtenerTextoPorCodigo(catalogos["colores"], objeto.color).capitalize()
     ventana = tk.Toplevel(ventanaPrincipal)
     ventana.title("Observar espacio")
     ventana.geometry("380x320")
     ventana.resizable(False, False)
+    ventana.columnconfigure(0, weight=1)
+    ventana.columnconfigure(1, weight=1)
     tk.Label(ventana, text="Informacion del espacio", font=("Arial", 14, "bold")).grid(row=0, column=0, columnspan=2, pady=10)
-    tk.Label(ventana, text="#Campo:").grid(row=1, column=0, sticky="e", padx=5, pady=5)
+    tk.Label(ventana, text="Campo:").grid(row=1, column=0, sticky="e", padx=5, pady=5)
     comboUbicacion = ttk.Combobox(ventana, values=[objeto.ubicacion], state="readonly")
     comboUbicacion.set(objeto.ubicacion)
     comboUbicacion.grid(row=1, column=1, sticky="w", padx=5, pady=5)
@@ -482,9 +491,11 @@ def ventanaObservarEspacio(ventanaPrincipal, ventanaEstacionamiento, objeto, lis
     ventana.grab_set()
     return
 
+#Botón 3
 def reportes():
     messagebox.showinfo("Info", "Proximamente: Reportes")
 
+#Botón 4
 def validarCamposConfiguracion(tamano, gracia, monto):
     """
     Funcionalidad: Valida que los campos de configuracion sean numeros enteros positivos.
@@ -526,29 +537,6 @@ def validarReduccionTamano(listaObjetos, nuevaDistribucion):
             return False
     return True
 
-def ejecutarLlenadoInicial(config):
-    """
-    Funcionalidad: Ejecuta el llenado masivo inicial: calcula distribucion, consulta
-    el API, construye catalogos y guarda la lista de objetos en disco.
-    Entrada:
-    - config (dict): Diccionario con tamano y tieneElectrico.
-    Salida:
-    - None
-    """
-    tamano = config["tamano"]
-    tieneElectrico = config["tieneElectrico"]
-    distribucion = calcularDistribucionEspacios(tamano, tieneElectrico)
-    registrosExploracion = obtenerDatosMockaroo(100)
-    listasUnicas = obtenerListasUnicas(registrosExploracion)
-    catalogos = construirCatalogos(listasUnicas)
-    guardarCatalogos(catalogos)
-    registrosLlenado = obtenerDatosMockaroo(distribucion["topeMasivo"])
-    diccionarioPlacas = filtrarRegistros(registrosLlenado)
-    ubicaciones = generarUbicacionesGenerales(distribucion["porAsignar"])
-    listaObjetos = construirListaObjetos(diccionarioPlacas, ubicaciones, catalogos)
-    guardarBD(listaObjetos)
-    return
-
 def guardarConfiguracion(ventana, entradaTamano, entradaGracia, entradaMonto, variableElectrico, esConfiguracionNueva):
     """
     Funcionalidad: Valida y guarda los datos de configuracion. Si es la primera vez,
@@ -582,11 +570,7 @@ def guardarConfiguracion(ventana, entradaTamano, entradaGracia, entradaMonto, va
             nuevaDistribucion = calcularDistribucionEspacios(nuevoTamano, nuevoTieneElectrico)
             if not validarReduccionTamano(listaObjetos, nuevaDistribucion):
                 messagebox.showerror(
-                    "Cambio no permitido",
-                    "No se puede aplicar este cambio porque hay vehiculos estacionados\n"
-                    "en espacios que dejarian de existir con la nueva configuracion.\n"
-                    "Libere esos espacios o elija un tamano mayor."
-                )
+                    "Cambio no permitido", "No se puede aplicar este cambio porque hay vehiculos estacionados\n" "en espacios que dejarian de existir con la nueva configuracion.\n" "Libere esos espacios o elija un tamano mayor.")
                 return
         respuesta = messagebox.askyesno("Confirmar", "Desea actualizar la configuracion del parqueo")
         if not respuesta:
@@ -599,8 +583,7 @@ def guardarConfiguracion(ventana, entradaTamano, entradaGracia, entradaMonto, va
     }
     guardarConfig(config)
     if esConfiguracionNueva:
-        ejecutarLlenadoInicial(config)
-        messagebox.showinfo("Configuracion", "Configuracion guardada y parqueo inicializado")
+        messagebox.showinfo("Configuracion", "Configuracion guardada correctamente.\nUtilice 'Obtener vehiculos' para llenar el parqueo.")
     else:
         messagebox.showinfo("Configuracion", "Configuracion actualizada correctamente")
     ventana.destroy()
@@ -643,6 +626,7 @@ def configuracion(ventanaPrincipal):
     ventana.wait_window()
     return
 
+#Botón 5
 def acercaDe(ventanaPrincipal):
     """
     Funcionalidad:
@@ -697,7 +681,7 @@ def construirInterfaz(ventana):
     listaBotones = [
         ("Obtener vehiculos", lambda: obtenerVehiculos()),
         ("Ver estacionamiento", lambda: verEstacionamiento(ventana)),
-        ("Reportes", reportes),
+        ("Reportes", lambda: reportes(ventana)),
         ("Configuracion", lambda: configuracion(ventana)),
         ("Acerca de", lambda: acercaDe(ventana)),
     ]
@@ -708,7 +692,9 @@ def construirInterfaz(ventana):
 def main():
     """
     Funcionalidad: Punto de entrada del sistema. Verifica la configuracion inicial
-    y construye la ventana principal con el menu de botones.
+    y construye la ventana principal con el menu de botones. La ventana principal
+    permanece oculta mientras se solicita la configuracion inicial, para que el
+    usuario no vea una ventana vacia de fondo.
     Entrada:
     - Ninguna.
     Salida:
@@ -718,9 +704,11 @@ def main():
     ventana.title("Sistema de Parqueo")
     ventana.geometry("400x450")
     ventana.resizable(False, False)
+    ventana.withdraw()
     configuracionLista = verificarConfiguracionInicial(ventana)
     if configuracionLista:
         construirInterfaz(ventana)
+        ventana.deiconify()
         ventana.mainloop()
     return
 
