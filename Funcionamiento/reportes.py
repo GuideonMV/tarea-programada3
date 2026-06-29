@@ -1,12 +1,12 @@
 import datetime
 import random
 
+from funcionamiento.catalogos import obtenerTextoPorCodigo
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
 
 carpetaReportes = "reportes"
 catalogoPagos = {1: "Efectivo", 2: "SINPE", 3: "Tarjeta"}
-
 
 def cerrarVehiculosPendientes(listaObjetos):
     """
@@ -64,6 +64,7 @@ def agruparPorTipoPago(listaObjetos):
         if objeto.tipoPago in grupos:
             grupos[objeto.tipoPago].append(objeto)
     return grupos
+
 
 def crearEncabezadoPDF(pdf, altoPagina, fecha):
     """
@@ -174,3 +175,79 @@ def generarCierreDiarioPDF(listaObjetos, catalogos, config):
     pdf.drawString(440, posicionY, "{:,}".format(totalDia) + " colones")
     pdf.save()
     return rutaReporte
+
+def generarCierrePorTipoPagoXML(listaObjetos, catalogos, config):
+    """
+    Funcionalidad:
+    Genera un archivo XML con tres secciones (efectivo, sinpe, tarjeta),
+    donde cada seccion contiene la informacion completa y plana de cada
+    objeto con ese tipo de pago. Lo guarda en memoria secundaria.
+    Entrada:
+    - listaObjetos (list): Lista de objetos Estacionamiento del dia.
+    - catalogos (dict): Diccionario de catalogos de marcas, colores y tipos.
+    - config (dict): Configuracion con montoHora y tiempoGracia.
+    Salida:
+    - rutaXML (str): Ruta del archivo XML generado.
+    """
+    fecha = datetime.datetime.now().strftime("%d-%m-%Y")
+    nombreArchivo = "cierre_tipo_pago_" + fecha + ".xml"
+    rutaXML = carpetaReportes + "/" + nombreArchivo
+    grupos = agruparPorTipoPago(listaObjetos)
+    nombresSecciones = {1: "efectivo", 2: "sinpe", 3: "tarjeta"}
+    lineas = []
+    lineas.append('<?xml version="1.0" encoding="UTF-8"?>')
+    lineas.append("<cierrePorTipoPago>")
+    lineas.append("<fecha>" + fecha + "</fecha>")
+    for tipoPago in [1, 2, 3]:
+        seccion = nombresSecciones[tipoPago]
+        lineas.append("<" + seccion + ">")
+        for objeto in grupos[tipoPago]:
+            monto = calcularMontoObjeto(objeto, config["montoHora"], config["tiempoGracia"])
+            textoMarca = obtenerTextoPorCodigo(catalogos["marcas"], objeto.marca)
+            textoColor = obtenerTextoPorCodigo(catalogos["colores"], objeto.color)
+            textoTipo  = obtenerTextoPorCodigo(catalogos["tipos"],   objeto.tipo)
+            lineas.append("<vehiculo>")
+            lineas.append("<id>" + str(objeto.id) + "</id>")
+            lineas.append("<placa>" + objeto.placa + "</placa>")
+            lineas.append("<marca>" + textoMarca + "</marca>")
+            lineas.append("<color>" + textoColor + "</color>")
+            lineas.append("<tipo>" + textoTipo + "</tipo>")
+            lineas.append("<ubicacion>" + objeto.ubicacion + "</ubicacion>")
+            lineas.append("<fechaHoraEntrada>" + objeto.fechaHoraEntrada + "</fechaHoraEntrada>")
+            lineas.append("<fechaHoraSalida>" + objeto.fechaHoraSalida + "</fechaHoraSalida>")
+            lineas.append("<tipoPago>" + catalogoPagos[tipoPago] + "</tipoPago>")
+            lineas.append("<monto>" + str(monto) + "</monto>")
+            lineas.append("</vehiculo>")
+        lineas.append("</" + seccion + ">")
+    lineas.append("</cierrePorTipoPago>")
+    with open(rutaXML, "w", encoding="utf-8") as archivo:
+        for linea in lineas:
+            archivo.write(linea + "\n")
+    return rutaXML
+
+def generarCierreDiarioCSV(listaObjetos, config):
+    """
+    Funcionalidad:
+    Exporta el cierre diario a un archivo CSV sin titulos, con las
+    columnas: ubicacion, placa, hora de entrada, hora de salida,
+    tipo de pago y monto. Solo incluye vehiculos con salida registrada.
+    Listo para abrir en Excel.
+    Entrada:
+    - listaObjetos (list): Lista de objetos Estacionamiento del dia.
+    - config (dict): Configuracion con montoHora y tiempoGracia.
+    Salida:
+    - rutaCSV (str): Ruta del archivo CSV generado.
+    """
+    fecha = datetime.datetime.now().strftime("%d-%m-%Y")
+    nombreArchivo = "cierre_diario_" + fecha + ".csv"
+    rutaCSV = carpetaReportes + "/" + nombreArchivo
+    with open(rutaCSV, "w", encoding="utf-8", newline="") as archivo:
+        archivo.write("sep=;\r\n")
+        for objeto in listaObjetos:
+            if objeto.fechaHoraSalida == "":
+                continue
+            monto = calcularMontoObjeto(objeto, config["montoHora"], config["tiempoGracia"])
+            textoPago = catalogoPagos[objeto.tipoPago]
+            linea = (objeto.ubicacion + ";" +objeto.placa + ";" +objeto.fechaHoraEntrada + ";" +objeto.fechaHoraSalida + ";" +textoPago + ";" + str(monto))
+            archivo.write(linea + "\r\n")
+    return rutaCSV
