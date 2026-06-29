@@ -492,8 +492,29 @@ def ventanaObservarEspacio(ventanaPrincipal, ventanaEstacionamiento, objeto, lis
     return
 
 #Botón 3
-def reportes():
-    messagebox.showinfo("Info", "Proximamente: Reportes")
+
+
+def reportes(ventanaPrincipal):
+    """
+    Funcionalidad:
+    Abre la ventana del menu de reportes con las opciones de cierre
+    diario, cierre por tipo de pago y exportar a CSV.
+    Entrada:
+    - ventanaPrincipal (Tk): Ventana principal del sistema.
+    Salida:
+    - None
+    """
+    ventana = tk.Toplevel(ventanaPrincipal)
+    ventana.title("Reportes")
+    ventana.geometry("350x320")
+    ventana.resizable(False, False)
+    tk.Label(ventana, text="Reportes", font=("Arial", 14, "bold")).pack(pady=(25, 15))
+    tk.Button(ventana, text="Cierre diario", width=28, height=2).pack(pady=8)
+    tk.Button(ventana, text="Cierre por tipo de pago", width=28).pack(pady=8)
+    tk.Button(ventana, text="Exportar cierre diario a CSV", width=28, height=2).pack(pady=8)
+    tk.Button(ventana, text="Regresar", width=28, height=2,command=ventana.destroy).pack(pady=(15, 0))
+    ventana.grab_set()
+    return
 
 #Botón 4
 def validarCamposConfiguracion(tamano, gracia, monto):
