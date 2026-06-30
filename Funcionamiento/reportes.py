@@ -1,13 +1,22 @@
+#Elaborado por: Jimena Acuña Parra y Guideon Montero Vargas
+#Fecha de elaboración: 11/06/2026 11:24 am
+#Última fecha de modificación: 29/04/2026 7:47 pm
+#Versión: 3.14.3
+
+#librerías
 import datetime
 import random
 
+#Importación de funciones
 from funcionamiento.catalogos import obtenerTextoPorCodigo
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
 
+#Inicialización de variables
 carpetaReportes = "reportes"
 catalogoPagos = {1: "Efectivo", 2: "SINPE", 3: "Tarjeta"}
 
+#Funciones
 def cerrarVehiculosPendientes(listaObjetos):
     """
     Funcionalidad:
@@ -65,8 +74,7 @@ def agruparPorTipoPago(listaObjetos):
             grupos[objeto.tipoPago].append(objeto)
     return grupos
 
-
-def crearEncabezadoPDF(pdf, altoPagina, fecha):
+def dibujarEncabezadoPDF(pdf, altoPagina, fecha):
     """
     Funcionalidad:
     Dibuja el titulo, la fecha y los encabezados de la tabla en el PDF.
@@ -158,7 +166,7 @@ def generarCierreDiarioPDF(listaObjetos, catalogos, config):
     rutaReporte = carpetaReportes + "/cierre_diario_" + fecha + ".pdf"
     pdf = canvas.Canvas(rutaReporte, pagesize=letter)
     anchoPagina, altoPagina = letter
-    posicionY = crearEncabezadoPDF(pdf, altoPagina, fecha)
+    posicionY = dibujarEncabezadoPDF(pdf, altoPagina, fecha)
     grupos = agruparPorTipoPago(listaObjetos)
     totalDia = 0
     for tipoPago in [1, 2, 3]:
@@ -233,13 +241,13 @@ def generarCierreDiarioCSV(listaObjetos, config):
     tipo de pago y monto. Solo incluye vehiculos con salida registrada.
     Listo para abrir en Excel.
     Entrada:
-    - listaObjetos (list): Lista de objetos Estacionamiento del dia.
-    - config (dict): Configuracion con montoHora y tiempoGracia.
+    listaObjetos (list): Lista de objetos Estacionamiento del dia.
+    config (dict): Configuracion con montoHora y tiempoGracia.
     Salida:
-    - rutaCSV (str): Ruta del archivo CSV generado.
+    rutaCSV (str): Ruta del archivo CSV generado.
     """
     fecha = datetime.datetime.now().strftime("%d-%m-%Y")
-    nombreArchivo = "cierre_diario_" + fecha + ".csv"
+    nombreArchivo = "cierrediario" + fecha + ".csv"
     rutaCSV = carpetaReportes + "/" + nombreArchivo
     with open(rutaCSV, "w", encoding="utf-8", newline="") as archivo:
         archivo.write("sep=;\r\n")
@@ -248,6 +256,11 @@ def generarCierreDiarioCSV(listaObjetos, config):
                 continue
             monto = calcularMontoObjeto(objeto, config["montoHora"], config["tiempoGracia"])
             textoPago = catalogoPagos[objeto.tipoPago]
-            linea = (objeto.ubicacion + ";" +objeto.placa + ";" +objeto.fechaHoraEntrada + ";" +objeto.fechaHoraSalida + ";" +textoPago + ";" + str(monto))
+            linea = (objeto.ubicacion + ";" +
+                    objeto.placa + ";" +
+                    objeto.fechaHoraEntrada + ";" +
+                    objeto.fechaHoraSalida + ";" +
+                    textoPago + ";" +
+                    str(monto))
             archivo.write(linea + "\r\n")
     return rutaCSV

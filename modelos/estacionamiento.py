@@ -1,3 +1,9 @@
+#Elaborado por: Jimena Acuña Parra y Guideon Montero Vargas
+#Fecha de elaboración: 11/06/2026 11:24 am
+#Última fecha de modificación: 29/04/2026 7:47 pm
+#Versión: 3.14.3
+
+#Clase de objeto
 class Estacionamiento:
     """
     Funcionalidad: Representa un vehiculo estacionado en un espacio del parqueo.
@@ -15,6 +21,8 @@ class Estacionamiento:
     Salida:
     - Objeto Estacionamiento instanciado.
     """
+    #Funcion Init
+    
     def __init__(self, id, placa, marca, color, tipo, ubicacion, fechaHoraEntrada, fechaHoraSalida, monto, tipoPago):
         self.id = id                
         self.placa = placa             

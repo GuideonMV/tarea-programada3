@@ -1,9 +1,16 @@
+#Elaborado por: Jimena Acuña Parra y Guideon Montero Vargas
+#Fecha de elaboración: 11/06/2026 11:24 am
+#Última fecha de modificación: 29/04/2026 7:47 pm
+#Versión: 3.14.3
+
+#Importacion de Librerías
 import tkinter as tk
 import re
 import datetime
+
+#Importacion de Funciones
 from tkinter import ttk
 from tkinter import messagebox
-
 from funcionamiento.baseDatos import guardarConfig, cargarConfig, existeConfig, guardarBD, guardarCatalogos, cargarCatalogos, cargarBD
 from funcionamiento.api import obtenerDatosMockaroo, filtrarRegistros, obtenerListasUnicas
 from funcionamiento.calculosParqueo import calcularDistribucionEspacios, obtenerUbicacionesOcupadas, buscarObjetoPorUbicacion, obtenerUbicacionesLibres, calcularMonto
@@ -14,8 +21,11 @@ from modelos.estacionamiento import Estacionamiento
 from funcionamiento.vouchers import generarVouchersListaObjetos
 from funcionamiento.reportes import generarCierreDiarioPDF, generarCierrePorTipoPagoXML, generarCierreDiarioCSV, cerrarVehiculosPendientes
 
+#Variables Globales
 cierreDiarioRealizado = False
 
+
+#Funciones
 #Botón 1
 def obtenerVehiculos():
     """
@@ -793,6 +803,7 @@ def construirInterfaz(ventana):
         tk.Button(ventana, text=texto, command=comando, width=28, height=2, font=("Arial", 11)).pack(pady=5)
     return
 
+#Menu
 def main():
     """
     Funcionalidad: Punto de entrada del sistema. Verifica la configuracion inicial

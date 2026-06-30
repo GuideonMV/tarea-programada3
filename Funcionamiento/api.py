@@ -1,9 +1,16 @@
+#Elaborado por: Jimena Acuña Parra y Guideon Montero Vargas
+#Fecha de elaboración: 11/06/2026 11:24 am
+#Última fecha de modificación: 29/04/2026 7:47 pm
+#Versión: 3.14.3
+
+#Librerías
 import urllib.request
 import json
 
+#Inicialización del Api
 urlBaseMockaroo = "https://api.mockaroo.com/api/7bca61f0?key=4a719e30"
 
-
+#Funciones
 def obtenerDatosMockaroo(cantidad):
     """
     Funcionalidad:

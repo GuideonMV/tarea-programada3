@@ -1,11 +1,21 @@
+#Elaborado por: Jimena Acuña Parra y Guideon Montero Vargas
+#Fecha de elaboración: 11/06/2026 11:24 am
+#Última fecha de modificación: 29/04/2026 7:47 pm
+#Versión: 3.14.3
+
+#Librerías
 import qrcode
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
+
+#Importación de funciones
 from funcionamiento.catalogos import obtenerTextoPorCodigo
 
+#Inicialización de variables
 carpetaVouchers = "vouchers"
 archivoQRTemp   = carpetaVouchers + "/_temp_qr.png"
 
+#Funciones
 def construirNombreArchivoVoucher(objeto):
     """
     Funcionalidad:
@@ -26,6 +36,7 @@ def generarImagenQR(objeto, catalogos):
     Funcionalidad:
     Genera la imagen del codigo QR con la informacion Placa-Marca-Tipo-
     FechaHoraEntrada y la guarda temporalmente en disco usando open().
+    No utiliza el modulo os.
     Entrada:
     - objeto (Estacionamiento): Objeto con los datos del vehiculo.
     - catalogos (dict): Diccionario de catalogos de marcas, colores y tipos.
@@ -43,7 +54,7 @@ def eliminarQRTemp():
     """
     Funcionalidad:
     Elimina el contenido del archivo temporal del QR sobreescribiendolo
-    con bytes vacios.
+    con bytes vacios, sin usar el modulo os.
     Entrada:
     - Ninguna.
     Salida:
@@ -61,6 +72,7 @@ def generarVoucherPDF(objeto, catalogos, montoHora):
     Funcionalidad:
     Genera el voucher en formato PDF de un vehiculo recien estacionado,
     incluyendo su informacion y un codigo QR, y lo guarda en disco.
+    No utiliza el modulo os.
     Entrada:
     - objeto (Estacionamiento): Objeto con los datos del vehiculo ya estacionado.
     - catalogos (dict): Diccionario de catalogos de marcas, colores y tipos.
@@ -96,6 +108,7 @@ def generarVoucherPDF(objeto, catalogos, montoHora):
     pdf.save()
     eliminarQRTemp()
     return rutaVoucher
+
 
 def generarVouchersListaObjetos(listaObjetos, catalogos, montoHora):
     """

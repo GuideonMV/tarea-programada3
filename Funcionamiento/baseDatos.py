@@ -1,9 +1,17 @@
+#Elaborado por: Jimena Acuña Parra y Guideon Montero Vargas
+#Fecha de elaboración: 11/06/2026 11:24 am
+#Última fecha de modificación: 29/04/2026 7:47 pm
+#Versión: 3.14.3
+
+#Librería 
 import pickle
 
+#Inicialización de la base de datos
 archivoBD     = "datos/bdParqueo.pkl"
 archivoConfig = "datos/configParqueo.pkl"
 archivoCatalogos = "datos/catalogosParqueo.pkl"
 
+#Funciones
 def guardarBD(lista):
     """
     Funcionalidad:
@@ -93,11 +101,28 @@ def existeConfig():
         return False
 
 def guardarCatalogos(catalogos):
+    """
+    Funcionalidad:
+    Guarda el diccionario de catalogos (marcas, colores y tipos) en
+    memoria secundaria.
+    Entrada:
+    - catalogos (dict): Diccionario de catalogos a guardar.
+    Salida:
+    - None
+    """
     with open(archivoCatalogos, "wb") as f:
         pickle.dump(catalogos, f)
     return
 
 def cargarCatalogos():
+    """
+    Funcionalidad:
+    Carga el diccionario de catalogos desde memoria secundaria.
+    Entrada:
+    - Ninguna.
+    Salida:
+    - catalogos (dict): Diccionario de catalogos, o None si no existe.
+    """
     try:
         with open(archivoCatalogos, "rb") as f:
             return pickle.load(f)
@@ -105,6 +130,14 @@ def cargarCatalogos():
         return None
 
 def existeCatalogos():
+    """
+    Funcionalidad:
+    Verifica si ya existen catalogos guardados en disco.
+    Entrada:
+    - Ninguna.
+    Salida:
+    - resultado (bool): True si existe el archivo, False si no.
+    """
     try:
         with open(archivoCatalogos, "rb") as f:
             pass
