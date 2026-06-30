@@ -644,7 +644,8 @@ def guardarConfiguracion(ventana, entradaTamano, entradaGracia, entradaMonto, va
     ejecuta el llenado masivo. Si ya existia, permite modificar el tamano,
     tiempo de gracia, monto y espacio electrico, validando que un cambio de
     tamano o de espacio electrico no deje sin ubicacion valida a vehiculos
-    ya estacionados, y pide confirmacion antes de aplicar los cambios.
+    ya estacionados. Avisa si hay vehiculos pendientes cuando cambia el monto,
+    y pide confirmacion antes de aplicar los cambios.
     Entrada:
     - ventana (Toplevel): Ventana de configuracion a cerrar al finalizar.
     - entradaTamano (Entry): Campo del tamano del estacionamiento.
@@ -662,6 +663,7 @@ def guardarConfiguracion(ventana, entradaTamano, entradaGracia, entradaMonto, va
         messagebox.showerror("Error", "Los campos deben ser numeros enteros validos")
         return
     nuevoTamano = int(tamanoTexto)
+    nuevoMonto = int(montoTexto)
     nuevoTieneElectrico = variableElectrico.get()
     if not esConfiguracionNueva:
         configActual = cargarConfig()
@@ -670,18 +672,19 @@ def guardarConfiguracion(ventana, entradaTamano, entradaGracia, entradaMonto, va
         if cambioRelevante and listaObjetos:
             nuevaDistribucion = calcularDistribucionEspacios(nuevoTamano, nuevoTieneElectrico)
             if not validarReduccionTamano(listaObjetos, nuevaDistribucion):
-                messagebox.showerror(
-                    "Cambio no permitido", "No se puede aplicar este cambio porque hay vehiculos estacionados\n" "en espacios que dejarian de existir con la nueva configuracion.\n" "Libere esos espacios o elija un tamano mayor.")
+                messagebox.showerror("Cambio no permitido", "No se puede aplicar este cambio porque hay vehiculos estacionados\n" "en espacios que dejarian de existir con la nueva configuracion.\n" "Libere esos espacios o elija un tamano mayor.")
                 return
+        if nuevoMonto != configActual["montoHora"]:
+            pendientes = 0
+            for objeto in listaObjetos:
+                if objeto.fechaHoraSalida == "":
+                    pendientes = pendientes + 1
+            if pendientes > 0:
+                messagebox.showwarning("Aviso de cambio de monto", "Hay " + str(pendientes) + " vehiculo(s) pendientes de pago.\n" "El nuevo monto de " + montoTexto + " colones por hora\n" "aplica unicamente a partir de este momento.")
         respuesta = messagebox.askyesno("Confirmar", "Desea actualizar la configuracion del parqueo")
         if not respuesta:
             return
-    config = {
-        "tamano": nuevoTamano,
-        "tiempoGracia": int(graciaTexto),
-        "montoHora": int(montoTexto),
-        "tieneElectrico": nuevoTieneElectrico
-    }
+    config = {"tamano": nuevoTamano, "tiempoGracia": int(graciaTexto), "montoHora": nuevoMonto, "tieneElectrico": nuevoTieneElectrico}
     guardarConfig(config)
     if esConfiguracionNueva:
         messagebox.showinfo("Configuracion", "Configuracion guardada correctamente.\nUtilice 'Obtener vehiculos' para llenar el parqueo.")
