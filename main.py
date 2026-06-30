@@ -12,6 +12,9 @@ from funcionamiento.llenadoMasivo import generarUbicacionesGenerales, construirL
 from funcionamiento.vouchers import generarVoucherPDF
 from modelos.estacionamiento import Estacionamiento
 from funcionamiento.vouchers import generarVouchersListaObjetos
+from funcionamiento.reportes import generarCierreDiarioPDF, generarCierrePorTipoPagoXML, generarCierreDiarioCSV, cerrarVehiculosPendientes
+
+cierreDiarioRealizado = False
 
 #Botón 1
 def obtenerVehiculos():
@@ -493,6 +496,83 @@ def ventanaObservarEspacio(ventanaPrincipal, ventanaEstacionamiento, objeto, lis
 
 #Botón 3
 
+def cierreDiario(ventanaPrincipal):
+    """
+    Funcionalidad:
+    Cierra los vehiculos pendientes, genera el PDF del cierre diario
+    con subtotales por tipo de pago y total del dia, guarda la BD
+    actualizada y muestra la ruta del archivo generado. Si no hay
+    vehiculos pendientes avisa al usuario y no genera el reporte.
+    Entrada:
+    ventanaPrincipal (Tk): Ventana principal del sistema.
+    Salida:
+    None"""
+    global cierreDiarioRealizado
+    listaObjetos = cargarBD()
+    catalogos = cargarCatalogos()
+    config = cargarConfig()
+    if not listaObjetos:
+        messagebox.showwarning("Sin datos", "No hay vehiculos registrados para generar el cierre.")
+        return
+    pendientes = 0
+    for objeto in listaObjetos:
+        if objeto.fechaHoraSalida == "":
+            pendientes = pendientes + 1
+    if pendientes == 0:
+        messagebox.showinfo("Sin pendientes","Todos los vehiculos ya tienen salida registrada.\n""No hay pendientes para cerrar.")
+        return
+    respuesta = messagebox.askyesno("Cierre diario","Hay " + str(pendientes) + " vehiculo(s) pendiente(s) de cierre.\n""Se les asignara salida y tipo de pago automaticamente.\n¿Desea continuar?")
+    if not respuesta:
+        return
+    cerrarVehiculosPendientes(listaObjetos)
+    guardarBD(listaObjetos)
+    rutaPDF = generarCierreDiarioPDF(listaObjetos, catalogos, config)
+    cierreDiarioRealizado = True
+    messagebox.showinfo("Cierre diario", "Reporte generado en: " + rutaPDF)
+    return
+
+def cierrePorTipoPago(ventanaPrincipal):
+    """
+    Funcionalidad:
+    Genera el archivo XML del cierre por tipo de pago con tres secciones:
+    efectivo, sinpe y tarjeta, y muestra la ruta del archivo generado.
+    Entrada:
+    - ventanaPrincipal (Tk): Ventana principal del sistema.
+    Salida:
+    - None
+    """
+    listaObjetos = cargarBD()
+    catalogos    = cargarCatalogos()
+    config       = cargarConfig()
+    if not listaObjetos:
+        messagebox.showwarning("Sin datos", "No hay vehiculos registrados para generar el cierre.")
+        return
+    rutaXML = generarCierrePorTipoPagoXML(listaObjetos, catalogos, config)
+    messagebox.showinfo("Cierre por tipo de pago", "Archivo XML generado en: " + rutaXML)
+    return
+
+def exportarCSV(ventanaPrincipal):
+    """
+    Funcionalidad:
+    Exporta el cierre diario a un archivo CSV sin titulos para
+    abrirlo en Excel. Valida que el cierre diario se haya generado
+    primero antes de exportar.
+    Entrada:
+    ventanaPrincipal (Tk): Ventana principal del sistema.
+    Salida:
+    None"""
+    global cierreDiarioRealizado
+    if not cierreDiarioRealizado:
+        messagebox.showwarning("Cierre requerido","Debe generar el cierre diario primero antes de exportar a CSV.")
+        return
+    listaObjetos = cargarBD()
+    config       = cargarConfig()
+    if not listaObjetos:
+        messagebox.showwarning("Sin datos", "No hay vehiculos registrados para exportar.")
+        return
+    rutaCSV = generarCierreDiarioCSV(listaObjetos, config)
+    messagebox.showinfo("Exportar CSV", "Archivo CSV generado en: " + rutaCSV)
+    return
 
 def reportes(ventanaPrincipal):
     """
@@ -509,9 +589,9 @@ def reportes(ventanaPrincipal):
     ventana.geometry("350x320")
     ventana.resizable(False, False)
     tk.Label(ventana, text="Reportes", font=("Arial", 14, "bold")).pack(pady=(25, 15))
-    tk.Button(ventana, text="Cierre diario", width=28, height=2).pack(pady=8)
-    tk.Button(ventana, text="Cierre por tipo de pago", width=28).pack(pady=8)
-    tk.Button(ventana, text="Exportar cierre diario a CSV", width=28, height=2).pack(pady=8)
+    tk.Button(ventana, text="Cierre diario", width=28, height=2,command=lambda: cierreDiario(ventanaPrincipal)).pack(pady=8)
+    tk.Button(ventana, text="Cierre por tipo de pago", width=28, height=2,command=lambda: cierrePorTipoPago(ventanaPrincipal)).pack(pady=8)
+    tk.Button(ventana, text="Exportar cierre diario a CSV", width=28, height=2,command=lambda: exportarCSV(ventanaPrincipal)).pack(pady=8)
     tk.Button(ventana, text="Regresar", width=28, height=2,command=ventana.destroy).pack(pady=(15, 0))
     ventana.grab_set()
     return
